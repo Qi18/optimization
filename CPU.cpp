@@ -28,8 +28,9 @@ signed char*** calIndexTime(signed char ***src, signed char **index, int B, int 
     }
   }
   t2 = clock();
-  printf("cpu t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
-  printf("cpu t = %.8f\n",val/CLOCKS_PER_SEC);
+  printf("cpu 总赋值t = %.8f\n",val/CLOCKS_PER_SEC);
+  printf("cpu 一次赋值t = %.8f\n",(val / (B * 8 * L))/CLOCKS_PER_SEC);
+  printf("cpu 总t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
   return res;
 }
 
@@ -40,15 +41,17 @@ signed char*** calIndexTimeByTBL(signed char ***src, signed char **index, int B,
   float val = 0.0;
   signed char ***res = create3D(B, 8, L);
   for (int i = 0; i < B; i++) {
-    for (int k = 0; k < K / 8; k++) {
-      int8x8_t vdata, vdata_index;
+    for (int k = 0; k < K / 16; k++) {
+      int8x16_t vdata;
+      int8x8_t vdata_index;
       vdata_index = vld1_s8(index[i]);
       // uint32x4_t cmp2 = vcltq_u32(val, vdupq_n_u32(10));
-      for (int l = 0; l < 8; l++) vdata_index[l] = vdata_index[l] / 8 == k ? vdata_index[l] % 8 : -1;
+      for (int l = 0; l < 8; l++) vdata_index[l] = vdata_index[l] / 16 == k ? vdata_index[l] % 16 : -1;
       for (int j = 0; j < L; j++) {
-        for (int l = 0; l < 8; l++) vdata[l] = src[i][k * 8 + l][j];
+        for (int l = 0; l < 16; l++) vdata[l] = src[i][k * 16 + l][j];
         t2 = clock();
-        int8x8_t tbl_2= vtbl1_s8(vdata , vdata_index);
+        // int8x8_t tbl_2= vtbl1_s8(vdata , vdata_index);
+        int8x8_t tbl_2 = vqtbl1_s8(vdata, vdata_index);
         val += (float)(clock()-t2);
         for (int l = 0; l < 8; l++) if (vdata_index[l] != -1) res[i][l][j] = tbl_2[l];
       }
@@ -56,8 +59,9 @@ signed char*** calIndexTimeByTBL(signed char ***src, signed char **index, int B,
     }
   }
   t2 = clock();
-  printf("cpu tbl t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
-  printf("cpu tbl t = %.8f\n",val/CLOCKS_PER_SEC);
+  printf("cpu tbl 赋值t = %.8f\n",val/CLOCKS_PER_SEC);
+  printf("cpu tbl 一次赋值t = %.8f\n",(val * 8 / (B * K * L))/CLOCKS_PER_SEC);
+  printf("cpu tbl 总t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
   return res;
 }
 
@@ -172,7 +176,7 @@ void init2D(signed char **arr, int B, int M, int K) {
 }
 
 int main() {
-  int B = 100, K = 1024, L = 1024, M = 8;
+  int B = 10000, K = 8, L = 384, M = 8;
   signed char ***src = create3D(B, K, L);
   signed char **index = create2D(B, M);
   init3D(src, B, K, L);

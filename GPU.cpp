@@ -1,4 +1,4 @@
-//
+
 //  main.cpp
 //  OpenCL
 //
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
     clock_t t1,t2,t3;
 
 
-    const char* filename = "/Users/xxxxx/Projects/OpenCL/OpenCL/HelloWorld.cl";
+    const char* filename = "./HelloWorld.cl";
     // 一、选择OpenCL平台并创建一个上下文
     context = CreateContext();
 

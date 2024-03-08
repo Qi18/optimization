@@ -133,14 +133,14 @@ cl_program CreateProgram(cl_context context, cl_device_id device, const char* fi
 
 //创建和构建程序对象
 bool CreateMemObjects(cl_context context, cl_mem memObjects[3],
-                      int8_t ***src, uint8_t **index, int B, int K, int L)
+                      int8_t *src, uint8_t *index, int B, int K, int L, int M)
 {
     memObjects[0] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                    sizeof(int8_t) * B * K * L, src, NULL);
     memObjects[1] = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(uint8_t) * B * 8, index, NULL);
+                                   sizeof(uint8_t) * B * M, index, NULL);
     memObjects[2] = clCreateBuffer(context, CL_MEM_READ_WRITE,
-                                   sizeof(int8_t) * B * 8 * L, NULL, NULL);
+                                   sizeof(int8_t) * B * M * L, NULL, NULL); 
     return true;
 }
 
@@ -167,7 +167,7 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
         clReleaseContext(context);
 }
 
-void runGPU(signed char ***src, uint8_t **index, int B, int K, int L, int8_t ***res, const char* filename){
+void runGPU(int8_t *src, uint8_t *index,int B, int L, int K, int M, int8_t *res, const char* filename){
     cl_context context = 0;
     cl_command_queue commandQueue = 0;
     cl_program program = 0;
@@ -175,7 +175,6 @@ void runGPU(signed char ***src, uint8_t **index, int B, int K, int L, int8_t ***
     cl_kernel kernel = 0;
     cl_mem memObjects[3] = { 0, 0, 0 };
     cl_int errNum;
-   // uint64_t t1,t2,t3;
     clock_t t1,t2,t3;
     t1 = clock();  //mach_absolute_time();
 
@@ -212,58 +211,72 @@ void runGPU(signed char ***src, uint8_t **index, int B, int K, int L, int8_t ***
     // printf("t2 = %.8f\n",(double)t2);
 
     //创建内存对象
-    if (!CreateMemObjects(context, memObjects, src, index, B, K, L))//a
+    if (!CreateMemObjects(context, memObjects, src, index, B, K, L, M))//a
     {
         Cleanup(context, commandQueue, program, kernel, memObjects);
         return ;
     }
-    cout << "CreateMemObjects" << endl;
     // 五、 设置内核数据并执行内核
     errNum = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memObjects[0]);
     errNum |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &memObjects[1]);
     errNum |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &memObjects[2]);
 
-    size_t globalWorkSize[1] = { B };
-    size_t localWorkSize[1] = { 1 };
+    errNum |= clSetKernelArg(kernel, 3, sizeof(int), (void *)&B);
+    errNum |= clSetKernelArg(kernel, 4, sizeof(int), (void *)&L);
+    errNum |= clSetKernelArg(kernel, 5, sizeof(int), (void *)&M);
+    errNum |= clSetKernelArg(kernel, 6, sizeof(int), (void *)&K);
 
-    errNum = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL,
+    size_t globalWorkSize[2] = {B, L};
+    size_t localWorkSize[2] = {1, 1};
+
+    cl_event ev;
+    errNum = clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL,
                                     globalWorkSize, localWorkSize,
-                                    0, NULL, NULL);
+                                    0, NULL, &ev);
 
     // 六、 读取执行结果并释放OpenCL资源
     errNum = clEnqueueReadBuffer(commandQueue, memObjects[2], CL_TRUE,
-                                 0, ARRAY_SIZE * sizeof(float), res,
+                                 0, B * L * M * sizeof(int8_t), res,
                                  0, NULL, NULL);
+
+    // if (errNum != CL_SUCCESS)
+    // {
+    //     fprintf(stderr, "failed to read buffer\n");
+    //     return ;
+    // }
+    // errNum = clFlush(commandQueue);
+    // errNum = clFinish(commandQueue);
+    // errNum = clWaitForEvents(1, &events[0]);
+    // errNum = clReleaseEvent(events[0]);
 
     t3 = clock();  //mach_absolute_time();
     printf("gpu %s t = %.8f\n", filename, (float)(t3-t1)/CLOCKS_PER_SEC);
-    std::cout << std::endl;
-    std::cout << "Executed program succesfully." << std::endl;
+    // std::cout << "Executed program succesfully." << std::endl;
     Cleanup(context, commandQueue, program, kernel, memObjects);
 }
 
 
 int main()
 {
-    int B = 1, K = 16, L = 1, M = 8;
-    signed char ***src = create3D(B, K, L);
-    uint8_t **index = create2D(B, M);
-    init3D(src, B, K, L);
-    init2D(index, B, M, K);
-    signed char ***res1 = create3D(B, M, L);
-    signed char ***res2 = create3D(B, M, L);
+    int B = 200, K = 16, L = 100, M = 16;
+    int8_t *src = createOne<int8_t>(B * L * K);
+    uint8_t *index = createOne<uint8_t>(B * M);
+    initOne<int8_t>(src, B * L * K); 
+    initOne<uint8_t>(index, B * M, K);
+    int8_t *res1 = createOne<int8_t>(B * L * K);
+    int8_t *res2 = createOne<int8_t>(B * L * K);
     const char* shuffle_filename = "./shuffle_optimization.cl";
     const char* index_filename = "./index.cl";
-    // runGPU(src, index, B, K, L, res1, shuffle_filename);
-    runGPU(src, index, B, K, L, res2, index_filename);
-    // isEqual(res1, res2, B, M, L);
-    // print3D(src, B, K, L);
-    // print2D(index, B, M);
-    // print3D(res2, B, M, L);
-    print3D(res2, B, M, L);
-    delete3D(src, B, K);
-    delete2D(index, B);
-    delete3D(res2, B, M);
-    delete3D(res1, B, M);
+    runGPU(src, index, B, L, K, M, res1, shuffle_filename);
+    runGPU(src, index, B, L, K, M, res2, index_filename);
+    isEqual(res1, res2, B * M * L);
+    // printOne(src, B, L, K);
+    // printOne(index, B, M);
+    // printOne(res1, B, L, M);
+    // printOne(res2, B, L, M);
+    deleteOne(src);
+    deleteOne(index);
+    deleteOne(res2);
+    deleteOne(res1);
     return 0;
 }

@@ -233,6 +233,12 @@ void runGPU(int8_t *src, uint8_t *index,int B, int L, int K, int M, int8_t *res,
     errNum = clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL,
                                     globalWorkSize, localWorkSize,
                                     0, NULL, &ev);
+    cl_ulong time_start, time_end;
+    checkErr(err, "Kernel run");
+    errNum = clWaitForEvents(1, &event); checkErr(err, "Kernel run wait fro event");
+    errNum = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL); checkErr(err, "Kernel run get time start");
+    errNum = clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL); checkErr(err, "Kernel run get time end");
+    elapsed += (time_end - time_start);
 
     // 六、 读取执行结果并释放OpenCL资源
     errNum = clEnqueueReadBuffer(commandQueue, memObjects[2], CL_TRUE,
@@ -261,14 +267,14 @@ int main()
     int B = 200, K = 16, L = 100, M = 16;
     int8_t *src = createOne<int8_t>(B * L * K);
     uint8_t *index = createOne<uint8_t>(B * M);
-    initOne<int8_t>(src, B * L * K); 
+    initOne<int8_t>(src, B * L * K);
     initOne<uint8_t>(index, B * M, K);
-    int8_t *res1 = createOne<int8_t>(B * L * K);
-    int8_t *res2 = createOne<int8_t>(B * L * K);
+    int8_t *res1 = createOne<int8_t>(B * L * M);
+    int8_t *res2 = createOne<int8_t>(B * L * M);
     const char* shuffle_filename = "./shuffle_optimization.cl";
     const char* index_filename = "./index.cl";
-    runGPU(src, index, B, L, K, M, res1, shuffle_filename);
     runGPU(src, index, B, L, K, M, res2, index_filename);
+    runGPU(src, index, B, L, K, M, res1, shuffle_filename);
     isEqual(res1, res2, B * M * L);
     // printOne(src, B, L, K);
     // printOne(index, B, M);

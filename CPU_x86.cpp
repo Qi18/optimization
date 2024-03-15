@@ -16,38 +16,30 @@
 
 signed char*** calIndexTime(signed char ***src, uint8_t **index, int B, int K, int L, int M) {
   // src:[B, K, L] + index:[B, M] -> [B, M, L]
-  clock_t t1,t2;
-  float val = 0.0;
-  t1 = clock();
+  auto start = std::chrono::high_resolution_clock::now();
   signed char ***res = create3D(B, M, L);
   for (int i = 0; i < B; i++) {
     for (int j = 0; j < M; j++) {
       for (int k = 0; k < L; k++) {
         if (index[i][j] < 0 || index[i][j] >= K) continue;
-        t2 = clock();
         res[i][j][k] = src[i][index[i][j]][k];
-        val += (float)(clock()-t2);
       }
     }
   }
-  t2 = clock();
-  printf("cpu 总赋值t = %.8f\n",val/CLOCKS_PER_SEC);
-  printf("cpu 一次赋值t = %.8f\n",(val / (B * M * L))/CLOCKS_PER_SEC);
-  printf("cpu 总t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
+  auto end = std::chrono::high_resolution_clock::now();
+  auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+  std::cout << "CPU tbl time: " << nanoseconds << " ns" << std::endl;
   return res;
 }
 
 signed char*** calIndexTimeByPSHUFL(signed char ***src, uint8_t **index, int B, int K, int L, int M) {
-  clock_t t1,t2;
-  t1 = clock();
-  float val = 0.0;
+  auto start = std::chrono::high_resolution_clock::now();
   signed char ***res = create3D(B, M, L);
-  const int mask8[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-  const int mask16[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
   for (int i = 0; i < B; i++) {
     for (int k = 0; k < K / M; k++) {
-      __m128i vdata, vdata_index;
-      vdata_index = _mm_loadu_si128(reinterpret_cast<const __m128i*>(index[i]));
+      __m256i vdata, vdata_index;
+      // vdata_index = _mm_loadu_si128(reinterpret_cast<const __m128i*>(index[i]));
+      vdata_index = _mm256_load_si256(reinterpret_cast<const __m256i*>(index[i]));
       // int temp_value = _mm_extract_epi8(vdata_index, 0);
       // _mm_insert_epi8(vdata_index, temp_value / M == k ? temp_value % M : -1, 0);
       // temp_value = _mm_extract_epi8(vdata_index, 1);
@@ -83,16 +75,16 @@ signed char*** calIndexTimeByPSHUFL(signed char ***src, uint8_t **index, int B, 
       //   _mm_insert_epi8(vdata_index, temp_value / M == k ? temp_value % M : -1, 15);
       // }`
       for (int l = 0; l < M; l++) {
-         ((char *)(&vdata_index))[l] = index[i][l] / M == k ? index[i][l] % M : -1;
-        // cout << (int)((char *)(&vdata_index))[l] << endl;
+         ((char *)(&vdata_index))[l] = ((char *)(&vdata_index))[l] / M == k ? ((char *)(&vdata_index))[l] % M : -1;
+        cout << (int)((char *)(&vdata_index))[l] << " ";
         // cout << (int)index[i][l] << " ";
       }
-      // cout << endl;
+      cout << endl;
       for (int j = 0; j < L; j++) {
         for (int l = 0; l < M; l++) {
           ((char *)(&vdata))[l] = src[i][k * M + l][j];
           // cout << (int)src[i][k * M + l][j] << " ";
-          // cout << (int)vdata[l] << " ";
+          cout << (int)((char *)(&vdata))[l] << " ";
         }
         // _mm_insert_epi8(vdata, src[i][k * M + 0][j], 0);
         // _mm_insert_epi8(vdata, src[i][k * M + 1][j], 1);
@@ -112,10 +104,10 @@ signed char*** calIndexTimeByPSHUFL(signed char ***src, uint8_t **index, int B, 
         //   _mm_insert_epi8(vdata, src[i][k * M + 14][j], 14);
         //   _mm_insert_epi8(vdata, src[i][k * M + 15][j], 15);
         // }
-        t2 = clock();
-        // cout << endl;
-        __m128i xmm_result = _mm_shuffle_epi8(vdata, vdata_index);
-        val += (float)(clock()-t2);
+        cout << endl;
+        __m256i xmm_result = _mm256_shuffle_epi8(vdata, vdata_index);
+        // __m128i xmm_result = _mm_shuffle_epi8(vdata, vdata_index);
+        cout << endl;
         // if (_mm_extract_epi8(vdata_index, 0) != -1) {
         //   res[i][0][j] = _mm_extract_epi8(xmm_result, 0);
         //   cout << (int)_mm_extract_epi8(xmm_result, 0) << endl;
@@ -146,10 +138,9 @@ signed char*** calIndexTimeByPSHUFL(signed char ***src, uint8_t **index, int B, 
       }
     }
   }
-  t2 = clock();
-  printf("cpu shuffle 总赋值t = %.8f\n",val/CLOCKS_PER_SEC);
-  printf("cpu shuffle 一次赋值t = %.8f\n",(val * M / (B * K * L))/CLOCKS_PER_SEC);
-  printf("cpu shuffle 总t = %.8f\n",(float)(t2-t1)/CLOCKS_PER_SEC);
+  auto end = std::chrono::high_resolution_clock::now();
+  auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+  std::cout << "CPU tbl time: " << nanoseconds << " ns" << std::endl;
   return res;
 }
 
@@ -168,13 +159,12 @@ void ShuffleArray() {
 }
 
 int main() {
-    // M为8或16
-    int B = 1000, K = 16, L = 100, M = 16;
+    // M为8或16或32
+    int B = 1, K = 32, L = 1, M = 32;
     signed char ***src = create3D(B, K, L);
     uint8_t **index = create2D(B, M);
     init3D(src, B, K, L);
     init2D(index, B, M, K);
-    index[0][0] = 1;
     signed char ***res1 = calIndexTime(src, index, B, K, L, M);
     signed char ***res2 = calIndexTimeByPSHUFL(src, index, B, K, L, M);
     isEqual(res1, res2, B, M, L);

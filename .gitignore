@@ -1,3 +1,6 @@
 output/
 .vscode/
 .demo.dSYM/
+build/
+GPU.dSYM/
+

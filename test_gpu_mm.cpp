@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <random>
 #include <fstream>
+#include <arm_neon.h>
 
 bool isEqual(signed char ***arr1, signed char ***arr2, int K, int M, int L) {
   for (int i = 0; i < K; i++) {
@@ -74,7 +75,8 @@ void print3D(signed char ***arr, int B, int K, int L) {
   std::cout << std::endl;
 }
 
-void print2D(uint8_t **arr, int B, int M) {
+template <typename T>
+void print2D(T **arr, int B, int M) {
   std::cout << "print 2D" << std::endl;
   for (int i = 0; i < B; ++i) {
     for (int j = 0; j < M; ++j) {
@@ -115,13 +117,26 @@ template <typename T> T *createOne(int length) {
 }
 
 template <typename T> void initOne(T *arr, int length) {
-  std::random_device rd;
-  // 使用随机设备生成引擎
-  std::mt19937 gen(rd());
-  // 定义随机数分布
-  std::uniform_int_distribution<> dis(1, 100); // 生成1到100之间的随机整数
+  // std::random_device rd;
+  // // 使用随机设备生成引擎
+  // std::mt19937 gen(rd());
+  // // 定义随机数分布
+  // std::uniform_int_distribution<> dis(1, 100); // 生成1到100之间的随机整数
   for (int i = 0; i < length; ++i) {
-    arr[i] = dis(gen);
+    // arr[i] = dis(gen);
+    arr[i] = 1;
+  }
+}
+
+template <typename T> void initOneZero(T *arr, int length) {
+  // std::random_device rd;
+  // // 使用随机设备生成引擎
+  // std::mt19937 gen(rd());
+  // // 定义随机数分布
+  // std::uniform_int_distribution<> dis(1, 100); // 生成1到100之间的随机整数
+  for (int i = 0; i < length; ++i) {
+    // arr[i] = dis(gen);
+    arr[i] = 0;
   }
 }
 
@@ -395,6 +410,8 @@ size_t runCPU(int M, int N, int K) {
   int8_t *res = createOne<int8_t>(N * M);
   initOne<int8_t>(A, N * K);
   initOne<int8_t>(B, K * M);
+  // printOne(A, N, K);
+  // printOne(B, K, M);
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < M; j++) {
@@ -405,9 +422,14 @@ size_t runCPU(int M, int N, int K) {
       res[i * M + j] = sum;
     }
   }
+
+  // printOne(res, N, M);    
   auto end = std::chrono::high_resolution_clock::now();
   auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
   std::cout << "CPU time: " << nanoseconds << " ns" << std::endl;
+  deleteOne(A);
+  deleteOne(B);
+  deleteOne(res);
   return nanoseconds;
 }
 
@@ -415,34 +437,60 @@ size_t runCPUBlock(int M, int N, int K) {
   int8_t *A = createOne<int8_t>(N * K);
   int8_t *B = createOne<int8_t>(K * M);
   int8_t *res = createOne<int8_t>(N * M);
+  initOneZero<int8_t>(res, N * M);
   initOne<int8_t>(A, N * K);
   initOne<int8_t>(B, K * M);
+  // printOne(A, N, K);
+  // printOne(B, K, M);
   auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < M; j++) {
-      int sum = 0;
-      for (int k = 0; k < K; k++) {
-        sum += A[i * K + k] * B[k * M + j];
+  int row, col;
+  for (row = 0; row < N; row++){  
+    for (col = 0; col < ((M) & (~7)); col+=8){
+      int16x8_t buf = vmovl_s8(vld1_s8(&res[row * M + col]));
+      for (int k = 0; k < K; k++){
+        int16x8_t va = vmovl_s8(vld1_s8(&B[k * M + col]));
+        register int16_t vb = (int16_t) A[row * K + k];
+        // for (int i = 0; i < 8; i++){
+        //   std::cout << "va "<< (int)(va)[i] << " vb " << vb << " buf" << buf[i]<< std::endl;  
+        // }
+        buf = vmlaq_n_s16(buf, va, vb);
       }
-      res[i * M + j] = sum;
+      vst1_s8(&res[row * M + col], vqmovn_s16(buf)); 
+      // for (int i = 0; i < 8; i++){
+      //   std::cout << (int)(buf)[i] << " " <<(int)(vqmovn_s16(buf))[i] << std::endl;
+      // }
+    }
+    for (; col < M; col++){//deal with boundaries
+      register float temp = res[row * M + col];
+      for (int k = 0; k < K; k++){
+        temp += A[row * K + k] * B[k * M + col];
+      }
+      res[row * M + col] = temp;
     }
   }
+  // printOne(res, N, M);                     
   auto end = std::chrono::high_resolution_clock::now();
   auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-  std::cout << "CPU time: " << nanoseconds << " ns" << std::endl;
+  std::cout << "CPU block time: " << nanoseconds << " ns" << std::endl;
+  deleteOne(A);
+  deleteOne(B);
+  deleteOne(res);
   return nanoseconds;
 }
 
 int main() {
     TestMatMulGPU test;
-    int N = 100;
+    // int N = 100;
     
-    for (int M = 224; M <= 224 * 4; M += 224) {
-      int K = M * 9;
-      for (int B = 0; B < 10; B++) {
-        auto gpu_time = test.run(M, N, K);
-        auto cpu_time = runCPU(M, N, K);
-        std::cout << "GPU/CPU [" << M << ", " << N << ", " << K << "]: " << std::fixed << std::setprecision(10) << (double)gpu_time / cpu_time << std::endl << std::endl;
-      }
-    }
+    // for (int M = 224; M <= 224 * 4; M += 224) {
+    //   int K = M * 9;
+    //   for (int B = 0; B < 10; B++) {
+    //     auto gpu_time = test.run(M, N, K);
+    //     auto cpu_time = runCPU(M, N, K);
+    //     std::cout << "GPU/CPU [" << M << ", " << N << ", " << K << "]: " << std::fixed << std::setprecision(10) << (double)gpu_time / cpu_time << std::endl << std::endl;
+    //   }
+    // }
+    int N = 100000, K = 16, M = 384;
+    auto time = runCPUBlock(N, K, M);
+    auto time_kernel = runCPU(N, K, M);
 }

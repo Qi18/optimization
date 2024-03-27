@@ -8,6 +8,8 @@ bool isEqual(signed char ***arr1, signed char ***arr2, int K, int M, int L) {
     for (int j = 0; j < M; j++) {
       for (int k = 0; k < L; k++) {
         if (arr1[i][j][k] != arr2[i][j][k]) {
+          cout << i << " " << j << " " << k << endl;
+          cout << (int)arr1[i][j][k] << " " << (int)arr2[i][j][k] << endl;
           cout << "not equal" << endl;
           return false;
         }

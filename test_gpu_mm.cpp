@@ -490,7 +490,19 @@ int main() {
     //     std::cout << "GPU/CPU [" << M << ", " << N << ", " << K << "]: " << std::fixed << std::setprecision(10) << (double)gpu_time / cpu_time << std::endl << std::endl;
     //   }
     // }
-    int N = 100000, K = 16, M = 384;
-    auto time = runCPUBlock(N, K, M);
-    auto time_kernel = runCPU(N, K, M);
+    int N = 16, K = 16, M = 16;
+    // auto time = runCPUBlock(N, K, M);
+    // auto time_kernel = runCPU(N, K, M);
+    int8_t *A = createOne<int8_t>(N * K);
+    int8_t *B = createOne<int8_t>(K * M);
+    initOne<int8_t>(A, N * K); 
+    initOne<int8_t>(B, K * M);
+    int8_t *res = createOne<int8_t>(N * M);
+    const char* kernel_filename = "./test_matmulblock.cl";
+    size_t time_kernel = runGPU(A, B, N, K, M, res, kernel_filename);
+    int8_t *res2 = createOne<int8_t>(N * M);
+    const char* kernel_filename2 = "./test_matmul.cl";
+    time_kernel = runGPU(A, B, N, K, M, res2, kernel_filename2);
+    isEqual(res, res2, N * M * K);
+    return 0;
 }

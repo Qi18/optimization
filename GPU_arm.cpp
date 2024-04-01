@@ -166,6 +166,7 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
 
 size_t runGPU(int8_t *src, uint8_t *index, int B, int L, int K, int M,
               int8_t *res, const char *filename) {
+    // src:[B, L, K] + index:[B, M] -> [B, L, K]
   cl_context context = 0;
   cl_command_queue commandQueue = 0;
   cl_program program = 0;

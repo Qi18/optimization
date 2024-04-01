@@ -173,9 +173,24 @@ template <typename T> void printOne(T *arr, int B, int M, int L) {
 
 template <typename T> void deleteOne(T *arr) { delete[] arr; }
 
-template <typename T> bool isEqual(T *arr1, T *arr2, int length) {
+// template <typename T> bool isEqual(T *arr1, T *arr2, int length) {
+//   for (int i = 0; i < length; i++) {
+//     if (arr1[i] != arr2[i]) {
+//       std::cout << (int)arr1[i] << std::endl;
+//       std::cout << (int)arr2[i] << std::endl;
+//       std::cout << (int)arr1[i] << " " << (int)arr2[i] << std::endl;
+//       std::cout << "not equal" << std::endl;
+//       return false;
+//     }
+//   }
+//   std::cout << "equal" << std::endl;
+//   return true;
+// }
+
+bool isEqual(signed char *arr1, signed char *arr2, int length) {
   for (int i = 0; i < length; i++) {
     if (arr1[i] != arr2[i]) {
+      std::cout << (int)arr1[i] << " " << (int)arr2[i] << std::endl;
       std::cout << "not equal" << std::endl;
       return false;
     }
@@ -354,7 +369,8 @@ size_t runGPU(int8_t *A, int8_t *B,int N, int K, int M, int8_t *res, const char*
     errNum |= clSetKernelArg(kernel, 5, sizeof(int), (void *)&M);
 
     size_t globalWorkSize[2] = {(size_t)N, (size_t)M};
-    size_t localWorkSize[2] = {1, 1};
+    // size_t localWorkSize[2] = {1, 1};
+    size_t localWorkSize[2] = {16, 16};
 
     cl_event ev;
     errNum = clEnqueueNDRangeKernel(commandQueue, kernel, 2, NULL,
@@ -365,6 +381,13 @@ size_t runGPU(int8_t *A, int8_t *B,int N, int K, int M, int8_t *res, const char*
     errNum = clEnqueueReadBuffer(commandQueue, memObjects[2], CL_TRUE,
                                  0, N * M * sizeof(int8_t), res,
                                  1, &ev, NULL);
+
+    // for (int i = 0; i < M; i++) {
+    //   for (int j = 0; j < N; j++) {
+    //     printf("%d ", static_cast<int>(res[j * M + i]));
+    //   }
+    //   printf("\n");
+    // }
 
     // if (errNum != CL_SUCCESS)
     // {
@@ -490,19 +513,34 @@ int main() {
     //     std::cout << "GPU/CPU [" << M << ", " << N << ", " << K << "]: " << std::fixed << std::setprecision(10) << (double)gpu_time / cpu_time << std::endl << std::endl;
     //   }
     // }
-    int N = 16, K = 16, M = 16;
+    // int N = 16, K = 16, M = 16;
+    int N = 16 * 100, K = 16 * 1000, M = 16 * 100;
     // auto time = runCPUBlock(N, K, M);
     // auto time_kernel = runCPU(N, K, M);
     int8_t *A = createOne<int8_t>(N * K);
     int8_t *B = createOne<int8_t>(K * M);
-    initOne<int8_t>(A, N * K); 
-    initOne<int8_t>(B, K * M);
+    initOne<int8_t>(A, N * K, 9);
+    initOne<int8_t>(B, K * M, 9);
+    // for (int i = 0; i < N; i++) {
+    //   for (int j = 0; j < K; j++) {
+    //     printf("%d ", static_cast<int>(A[i * K + j]));
+    //   }
+    //   printf("\n");
+    // }
+    // printf("\n");
+    // for (int i = 0; i < K; i++) {
+    //   for (int j = 0; j < M; j++) {
+    //     printf("%d ", static_cast<int>(B[i * M + j]));
+    //   }
+    //   printf("\n");
+    // }
+    // printf("\n");
     int8_t *res = createOne<int8_t>(N * M);
     const char* kernel_filename = "./test_matmulblock.cl";
     size_t time_kernel = runGPU(A, B, N, K, M, res, kernel_filename);
     int8_t *res2 = createOne<int8_t>(N * M);
     const char* kernel_filename2 = "./test_matmul.cl";
     time_kernel = runGPU(A, B, N, K, M, res2, kernel_filename2);
-    isEqual(res, res2, N * M * K);
+    isEqual(res, res2, N * M);
     return 0;
 }

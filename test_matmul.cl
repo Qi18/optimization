@@ -7,6 +7,7 @@ __kernel void hello_kernel(__global const char *A, __global const char *B, __glo
 	int A_offset = row * K;
 	int res_offset = row * M + col;
 	for (int i = 0; i < K; i++) {
-        result[res_offset] += A[A_offset + i] * B[i * M + col];        
+        result[res_offset] += A[A_offset + i] * B[i * M + col];
 	}
+	//printf("res = %d\n",result[res_offset]);
 }

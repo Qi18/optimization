@@ -30,6 +30,7 @@ signed char*** calIndexTime(signed char ***src, uint8_t **index, int B, int K, i
 
 
 signed char*** calIndexTimeByTBL(signed char ***src, uint8_t **index, int B, int K, int L, int M = 16) {
+  // src:[B, K, L] + index:[B, M] -> [B, M, L]
   auto start = std::chrono::high_resolution_clock::now();
   signed char ***res = create3D(B, M, L);
   for (int i = 0; i < B; i++) {

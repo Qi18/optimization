@@ -265,7 +265,7 @@ size_t runGPU(int8_t *src, uint8_t *index, int B, int L, int K, int M,
 
 int main()
 {
-    int B = 20, K = 16, L = 100, M = 16;
+    int B = 1000, K = 16, L = 100, M = 16;
     int8_t *src = createOne<int8_t>(B * L * K);
     uint8_t *index = createOne<uint8_t>(B * M);
     initOne<int8_t>(src, B * L * K);
